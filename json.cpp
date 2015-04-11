@@ -178,8 +178,8 @@ int main(int argc, char **argv)
 	f.open(QFile::ReadOnly);
 	QXmlStreamReader xml(&f);
 
-	std::unordered_map<std::string, supercharger> superchargers_by_ref;
-	std::vector<supercharger> all_superchargers;
+	std::list<supercharger> created_superchargers;
+	std::vector<supercharger> osm_superchargers;
 	
 	XmlTree tree(&xml);
 	
@@ -200,10 +200,7 @@ int main(int argc, char **argv)
 				sc.tags[e.value("k")] = e.value("v");
 			});
 			
-			if (!sc.tags["tesla:ref"].empty())
-				superchargers_by_ref[sc.tags["tesla:ref"]] = sc;
-			else
-				all_superchargers.push_back(sc);
+			osm_superchargers.push_back(sc);
 		});
 	});
 	
@@ -222,10 +219,9 @@ int main(int argc, char **argv)
 		
 		
 		const std::string id =
-			charger.get("locationId", "").isString()
+			charger["locationId"].isString()
 				? charger.get("locationId", "").asString()
-				: std::to_string(charger.get("locationId", "").asUInt());
-		std::cerr << "Reading \"" << id << "\"" << std::endl;
+				: std::to_string(charger["locationId"].asInt());
 		
 		try
 		{
@@ -244,22 +240,14 @@ int main(int argc, char **argv)
 			const std::string lat = charger["gps"].get("latitude", "").asString();
 			const std::string lon = charger["gps"].get("longitude", "").asString();
 			
-			supercharger* sc;
+			std::list<supercharger>::iterator sc;
 			
-			const auto sci = superchargers_by_ref.find(id);
-			if (sci != superchargers_by_ref.end())
-			{
-				// this supercharger is already in the db
-				std::cerr << "merging " << id << std::endl;
-				sc = &sci->second;
-			}
-			else
 			{
 				// search superchargers_by_ref by location,
 				// find the supercharger closest to me
-				supercharger *closest=nullptr;
+				const supercharger *closest=nullptr;
 				double dclosest = std::numeric_limits<double>::max();
-				for (auto &maybesc : all_superchargers)
+				for (const supercharger &maybesc : osm_superchargers)
 				{
 					double latdiff = std::fabs(std::stod(maybesc.lat) - std::stod(lat));
 					double londiff = std::fabs(std::stod(maybesc.lon) - std::stod(lon));
@@ -275,24 +263,22 @@ int main(int argc, char **argv)
 					std::cerr << "Connected id " << id << " with node " << closest->id
 					//	<< " " << closest->tags["name"] << ", " << closest->tags["addr:city"]
 						<< std::endl;
-					superchargers_by_ref[id] = *closest;
-					sc = &superchargers_by_ref[id];
+					sc = created_superchargers.insert(created_superchargers.end(), *closest);
 				}
 				else
 				{
-					sc = &superchargers_by_ref[id];
+					sc = created_superchargers.insert(created_superchargers.end(), supercharger());
 				}
 				sc->id = negative_ids--;
 			}
 			
+			// the supercharger that is already in OSM (or one with a lot of empty strings)
 			const supercharger old_sc = *sc;
 			
 			sc->lat = lat;
 			sc->lon = lon;
 			if (!hours.empty())
 				sc->tags["opening_hours"] = hours;
-			if (!id.empty())
-				sc->tags["tesla:ref"] = id;
 			sc->tags["socket:tesla_supercharger"] = chargers;
 			sc->tags["capacity"] = chargers;
 			sc->tags["operator"] = "Tesla Motors Inc.";
@@ -312,17 +298,17 @@ int main(int argc, char **argv)
 			
 			sc->tags["name"] = "Tesla Supercharger " + name;
 
+			// we haven't modified this entry at all, so don't
+			// update it
 			if (old_sc == *sc)
 			{
-				superchargers_by_ref.erase(id);
+				created_superchargers.erase(sc);
 			}
 			else
 			{
 				sc->version++;
 			}
 			
-			/*
-			*/
 			//std::cout << nid << "\t" << title << "\t" << chargers << "\t" << city << "\t" << chargers << "\t" << hours << std::endl;
 		}
 		catch (std::exception &e)
@@ -331,9 +317,8 @@ int main(int argc, char **argv)
 		}
 	}
 	
-	for (const auto &scpair : superchargers_by_ref)
+	for (const supercharger &sc: created_superchargers)
 	{
-		const supercharger &sc = scpair.second;
 		std::cout << "\t<node version='" << sc.version << "' id='" << sc.id << "' lat='" << sc.lat << "' lon='" << sc.lon << "'>\n";
 		for (const std::pair<std::string, std::string> &tag : sc.tags)
 		{
