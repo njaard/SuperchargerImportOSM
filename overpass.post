@@ -1,0 +1,13 @@
+[out:xml][timeout:25];
+// gather results
+(
+  // query part for: “cuisine=bagels”
+  node
+  	["amenity"="charging_station"]
+  	["name"~"[Ss]upercharger"]
+  ;
+);
+// print results
+out meta;
+
+out meta qt;
