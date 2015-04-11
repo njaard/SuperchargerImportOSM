@@ -1,11 +1,11 @@
-This program imports all the superchargers from http://supercharger.info into
+This program imports all the superchargers from http://supercharge.info into
 OSM.
 
 Dependencies: Qt4, libjsoncpp
 
 Typing "make run" compiles and runs the code.
 
-* The input is the list of superchargers from supercharger.info (Downloaded
+* The input is the list of supercharge from supercharge.info (Downloaded
 directly with wget).
 
 * It also downloads a list of likely superchargers that are already in OSM with
