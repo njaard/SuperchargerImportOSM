@@ -9,5 +9,3 @@
 );
 // print results
 out meta;
-
-out meta qt;
